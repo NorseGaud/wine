@@ -1,0 +1,50 @@
+# Silicon Cellar Wine build
+
+This branch holds the Wine source from CodeWeavers CrossOver (branch `crossover`) with the Silicon Cellar fixes. [Silicon Cellar](https://github.com/NorseGaud/siliconcellar) uses the result as its Engine.
+
+## Build
+
+```sh
+build/build-engine.sh <output-dir>
+```
+
+The output has the folders `bin`, `lib`, and `share`. You can move the folder, because all libraries use `@rpath`.
+
+Requirements:
+
+- x86_64 Homebrew in `/usr/local`. On Apple Silicon, install it with `arch -x86_64`. The script starts itself under `arch -x86_64`.
+- The Homebrew formulas in `deps.json` (`homebrew.build_formulas` and `homebrew.runtime_formulas`). The script stops and shows the install command if one is missing.
+- Xcode (for MoltenVK).
+
+The script downloads the pinned inputs in `deps.json` into `.work/cache` and checks each SHA-256. Work files go into `.work` (set `SC_WORK_DIR` to change this). A new run skips the steps that are complete. To build again from the start, remove `.work/stage` and `.work/wine-build`.
+
+Set `SC_SKIP_SMOKE_TESTS=1` to skip the smoke tests.
+
+## Steps
+
+1. Check the tools.
+2. Download and check the pinned inputs: the CrossOver source archive, llvm-mingw, and GStreamer.
+3. Build GMP, Nettle, GnuTLS, FreeType, and MoltenVK from the CrossOver archive (MoltenVK keeps the CrossOver SPIRV-Cross). Copy SDL2 from Homebrew. Expand the GStreamer packages. Give all these libraries `@rpath` install names.
+4. Configure Wine. The script stops if Wine would open a library from a build path.
+5. Build Wine and run `make install-lib`.
+6. Copy every non-system library into `lib/`, change the references to `@rpath`, and add the rpaths.
+7. Smoke tests: `wine --version`, `wineboot --init`, the probes in `probe/`, and no `/usr/local` or `.work` paths in any library.
+
+## Probes
+
+- `probe/boolean-args.c`: calls `NtQueryDirectoryObject` with dirty upper bits in the `BOOLEAN` arguments. The enumeration must end.
+- `probe/child-args.c`: checks that `SILICONCELLAR_CHILD_ARGS` adds arguments to a child process one time only.
+
+## Fixes on this branch
+
+- Backport of the upstream Wine `BOOLEAN` syscall fix (`d1415ab24e`, `f43402cde3`, `565091afa4`).
+- `SILICONCELLAR_CHILD_ARGS`: rules `exe=arguments` separated by `;`. A matching child process gets the arguments at the end of its command line.
+- `FullscreenBelowNotch`: Mac Driver option for each app (`HKCU\Software\Wine\AppDefaults\<app>.exe\Mac Driver`). Fullscreen stays below the camera housing.
+
+## Releases
+
+Push a tag `sc-<crossover version>-<n>` (for example `sc-26.3.0-1`). The `Engine` workflow builds on `macos-15-intel` and publishes the archive, its `.sha256`, and the source archive.
+
+## Licence
+
+Wine is LGPL-2.1-or-later (`COPYING.LIB`). The Engine archive has the licences of all bundled libraries in `share/doc`.

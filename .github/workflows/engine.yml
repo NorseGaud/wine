@@ -1,0 +1,80 @@
+name: Engine
+
+on:
+  push:
+    branches: [siliconcellar]
+    tags: ["sc-*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: engine-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15-intel
+    timeout-minutes: 360
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: "1"
+      ENGINE_DIR: ${{ runner.temp }}/engine
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Cache pinned inputs
+        uses: actions/cache@v4
+        with:
+          path: .work/cache
+          key: engine-inputs-${{ hashFiles('build/deps.json') }}
+
+      - name: Install Homebrew formulas
+        run: |
+          brew install $(plutil -extract homebrew.build_formulas raw -o - build/deps.json) \
+                       $(plutil -extract homebrew.runtime_formulas raw -o - build/deps.json)
+
+      - name: Build the Engine
+        run: build/build-engine.sh "$ENGINE_DIR"
+
+      - name: Check the D3DMetal hook
+        run: grep -q CX_APPLEGPTK_LIBD3DSHARED_PATH "$ENGINE_DIR/lib/wine/x86_64-unix/ntdll.so"
+
+      - name: Name the build
+        id: build_name
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "engine_tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "engine_tag=sc-dev-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Package
+        env:
+          ENGINE_TAG: ${{ steps.build_name.outputs.engine_tag }}
+        run: |
+          mkdir -p dist
+          engine_archive="dist/siliconcellar-wine-${ENGINE_TAG}-x86_64.tar.xz"
+          tar -C "$ENGINE_DIR" -cf - bin lib share | xz -T0 -6 > "$engine_archive"
+          (cd dist && shasum -a 256 "$(basename "$engine_archive")" > "$(basename "$engine_archive").sha256")
+          git archive --format=tar --prefix="siliconcellar-wine-${ENGINE_TAG}-source/" HEAD |
+            xz -T0 -6 > "dist/siliconcellar-wine-${ENGINE_TAG}-source.tar.xz"
+          ls -la dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: siliconcellar-wine-${{ steps.build_name.outputs.engine_tag }}
+          path: dist/
+          retention-days: 14
+
+      - name: Publish the release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ENGINE_TAG: ${{ steps.build_name.outputs.engine_tag }}
+        run: |
+          gh release create "$ENGINE_TAG" dist/* \
+            --title "Silicon Cellar Wine $ENGINE_TAG" \
+            --notes "Wine from CrossOver $(plutil -extract crossover.version raw -o - build/deps.json) source with Silicon Cellar fixes. Source: https://github.com/${GITHUB_REPOSITORY}/tree/${ENGINE_TAG} (LGPL-2.1-or-later). Build details: share/wine/siliconcellar-build-info.txt in the archive."

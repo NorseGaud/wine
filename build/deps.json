@@ -1,0 +1,34 @@
+{
+  "crossover": {
+    "version": "26.3.0",
+    "url": "https://media.codeweavers.com/pub/crossover/source/crossover-sources-26.3.0.tar.gz",
+    "sha256": "ac99c8ca4b3848f3e81784135f023df266b61c2345726ea55a50b3e030dd6872"
+  },
+  "nettle": {
+    "version": "3.10",
+    "url": "https://ftp.gnu.org/gnu/nettle/nettle-3.10.tar.gz",
+    "sha256": "b4c518adb174e484cb4acea54118f02380c7133771e7e9beb98a0787194ee47c"
+  },
+  "gnutls": {
+    "version": "3.8.3",
+    "url": "https://www.gnupg.org/ftp/gcrypt/gnutls/v3.8/gnutls-3.8.3.tar.xz",
+    "sha256": "f74fc5954b27d4ec6dfbb11dea987888b5b124289a3703afcada0ee520f4173e"
+  },
+  "llvm_mingw": {
+    "version": "20260616",
+    "url": "https://github.com/mstorsjo/llvm-mingw/releases/download/20260616/llvm-mingw-20260616-ucrt-macos-universal.tar.xz",
+    "sha256": "2cab02a2e964bd4aae981150a45985d07c657cfa8d244959eb9e2dcc5eedd7b1"
+  },
+  "gstreamer": {
+    "version": "1.28.7",
+    "runtime_url": "https://gstreamer.freedesktop.org/data/pkg/osx/1.28.7/gstreamer-1.0-1.28.7-universal.pkg",
+    "runtime_sha256": "529fdf4a4027d942e59b5b3564f6400adaa008f63ce5f3fed4ffe35d73911994",
+    "devel_url": "https://gstreamer.freedesktop.org/data/pkg/osx/1.28.7/gstreamer-1.0-devel-1.28.7-universal.pkg",
+    "devel_sha256": "72a44870cf02472cbf6e9a84bcc25ee6807dd1c26659a112066373544d365e7a"
+  },
+  "homebrew": {
+    "prefix": "/usr/local",
+    "build_formulas": "autoconf automake bison cmake flex gettext libtool m4 ninja pkgconf python@3.13",
+    "runtime_formulas": "sdl2"
+  }
+}
