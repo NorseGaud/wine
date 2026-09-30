@@ -83,7 +83,7 @@ static NSScreen* screen_covered_by_rect(NSRect rect, NSArray* screens)
 {
     for (NSScreen* screen in screens)
     {
-        if (NSContainsRect(rect, [screen frame]))
+        if (NSContainsRect(rect, NSRectFromCGRect(macdrv_screen_frame_below_notch(screen))))
             return screen;
     }
     return nil;

@@ -131,6 +131,7 @@ struct macdrv_query;
 extern bool macdrv_err_on;
 extern int topmost_float_inactive;
 extern bool capture_displays_for_fullscreen;
+extern bool fullscreen_below_notch;
 /* CrossOver Hack 10912: Mac Edit menu */
 extern int mac_edit_menu;
 extern bool left_option_is_alt;
@@ -608,6 +609,13 @@ extern void macdrv_clear_ime_text(void);
 /* CrossOver Hack #20512 */
 extern int is_apple_silicon(void);
 extern int is_skyrim_se_launcher(void);
+
+/* Silicon Cellar FullscreenBelowNotch */
+extern CGFloat macdrv_get_notch_height(CGDirectDisplayID display_id);
+#ifdef __OBJC__
+@class NSScreen;
+extern CGRect macdrv_screen_frame_below_notch(NSScreen *screen);
+#endif
 
 /* CW HACK 22435 */
 extern void macdrv_client_surface_presented(const macdrv_event *event);

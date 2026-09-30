@@ -725,7 +725,33 @@ static BOOL is_detached_mode(const DEVMODEW *mode)
            mode->dmPelsHeight == 0;
 }
 
-static CGDisplayModeRef find_best_display_mode(DEVMODEW *devmode, CFArrayRef display_modes, int bpp, struct display_mode_descriptor *desc)
+/***********************************************************************
+ *              notch_height_for_mode
+ *
+ * Silicon Cellar FullscreenBelowNotch: the height to remove from a mode
+ * of mode_height rows. Only modes with the size of the current mode are
+ * changed, because the notch height is known only for the current mode.
+ */
+static DWORD notch_height_for_mode(CGDirectDisplayID display_id, CGDisplayModeRef display_mode, DWORD mode_height)
+{
+    CGDisplayModeRef current_mode;
+    CGFloat notch_points;
+    DWORD notch_height = 0;
+
+    if (!fullscreen_below_notch) return 0;
+    if ((notch_points = macdrv_get_notch_height(display_id)) <= 0) return 0;
+    if (!(current_mode = CGDisplayCopyDisplayMode(display_id))) return 0;
+
+    if (CGDisplayModeGetWidth(current_mode) == CGDisplayModeGetWidth(display_mode) &&
+        CGDisplayModeGetHeight(current_mode) == CGDisplayModeGetHeight(display_mode))
+        notch_height = notch_points * mode_height / CGDisplayModeGetHeight(display_mode) + 0.5;
+
+    CGDisplayModeRelease(current_mode);
+    return notch_height;
+}
+
+static CGDisplayModeRef find_best_display_mode(CGDirectDisplayID display_id, DEVMODEW *devmode, CFArrayRef display_modes,
+                                               int bpp, struct display_mode_descriptor *desc)
 {
     CFIndex count, i, best;
     CGDisplayModeRef best_display_mode;
@@ -750,6 +776,7 @@ static CGDisplayModeRef find_best_display_mode(DEVMODEW *devmode, CFArrayRef dis
             width *= 2;
             height *= 2;
         }
+        height -= notch_height_for_mode(display_id, display_mode, height);
 
         if (bpp != mode_bpp)
             continue;
@@ -826,7 +853,7 @@ LONG macdrv_ChangeDisplaySettings(LPDEVMODEW displays, LPCWSTR primary_name, HWN
         TRACE(" %sinterlaced", mode->dmDisplayFlags & DM_INTERLACED ? "" : "non-");
         TRACE("\n");
 
-        if (!(best_display_mode = find_best_display_mode(mode, display_modes, bpp, desc)))
+        if (!(best_display_mode = find_best_display_mode(CGMainDisplayID(), mode, display_modes, bpp, desc)))
         {
             ERR("No matching mode found %ux%ux%d @%u!\n", mode->dmPelsWidth, mode->dmPelsHeight,
                 bpp, mode->dmDisplayFrequency);
@@ -891,6 +918,7 @@ static DEVMODEW *display_get_modes(CGDirectDisplayID display_id, int *modes_coun
             devmodes[i].dmPelsWidth *= 2;
             devmodes[i].dmPelsHeight *= 2;
         }
+        devmodes[i].dmPelsHeight -= notch_height_for_mode(display_id, mode, devmodes[i].dmPelsHeight);
     }
     free_display_mode_descriptor(desc);
 
@@ -940,6 +968,7 @@ static void display_get_current_mode(struct macdrv_monitor *monitor, DEVMODEW *d
         }
         free_display_mode_descriptor(desc);
     }
+    devmode->dmPelsHeight -= notch_height_for_mode(display_id, display_mode, devmode->dmPelsHeight);
 
     CFRelease(display_mode);
 }

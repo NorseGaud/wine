@@ -53,6 +53,40 @@ static uint64_t dedicated_gpu_id;
 static uint64_t integrated_gpu_id;
 
 /***********************************************************************
+ *              screen_notch_height
+ *
+ * Silicon Cellar FullscreenBelowNotch: height in points of the camera
+ * housing area at the top of the screen, or 0 when the option is off.
+ */
+static CGFloat screen_notch_height(NSScreen *screen)
+{
+    if (!fullscreen_below_notch) return 0;
+    if (@available(macOS 12.0, *))
+        return MAX(screen.safeAreaInsets.top, 0);
+    return 0;
+}
+
+CGRect macdrv_screen_frame_below_notch(NSScreen *screen)
+{
+    NSRect frame = screen.frame;
+    frame.size.height -= screen_notch_height(screen);
+    return NSRectToCGRect(frame);
+}
+
+CGFloat macdrv_get_notch_height(CGDirectDisplayID display_id)
+{
+@autoreleasepool
+{
+    for (NSScreen *screen in [NSScreen screens])
+    {
+        if ([[screen deviceDescription][@"NSScreenNumber"] unsignedIntValue] == display_id)
+            return screen_notch_height(screen);
+    }
+    return 0;
+}
+}
+
+/***********************************************************************
  *              convert_display_rect
  *
  * Converts an NSRect in Cocoa's y-goes-up-from-bottom coordinate system
@@ -980,9 +1014,11 @@ int macdrv_get_monitors(CGDirectDisplayID adapter_id, struct macdrv_monitor** ne
                 if (j == 0)
                     primary_index = monitor_count;
 
+                NSRect frame = NSRectFromCGRect(macdrv_screen_frame_below_notch(screen));
+
                 monitors[monitor_count].id = display_ids[i];
-                monitors[monitor_count].rc_monitor = cgrect_win_from_mac(convert_display_rect(screen.frame, primary_frame));
-                monitors[monitor_count].rc_work = cgrect_win_from_mac(convert_display_rect(screen.visibleFrame, primary_frame));
+                monitors[monitor_count].rc_monitor = cgrect_win_from_mac(convert_display_rect(frame, primary_frame));
+                monitors[monitor_count].rc_work = cgrect_win_from_mac(convert_display_rect(NSIntersectionRect(screen.visibleFrame, frame), primary_frame));
 
                 vendor_number = CGDisplayVendorNumber(monitors[monitor_count].id);
                 model_number = CGDisplayModelNumber(monitors[monitor_count].id);
