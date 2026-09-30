@@ -21,9 +21,11 @@ jobs:
     env:
       HOMEBREW_NO_AUTO_UPDATE: "1"
       HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: "1"
-      ENGINE_DIR: ${{ runner.temp }}/engine
     steps:
       - uses: actions/checkout@v5
+
+      - name: Set the Engine folder
+        run: echo "ENGINE_DIR=$RUNNER_TEMP/engine" >> "$GITHUB_ENV"
 
       - name: Cache pinned inputs
         uses: actions/cache@v4
