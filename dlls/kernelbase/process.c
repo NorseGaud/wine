@@ -500,6 +500,47 @@ done:
     return ret;
 }
 
+/***********************************************************************
+ *           append_child_args
+ *
+ * SILICONCELLAR_CHILD_ARGS holds rules "exe=arguments" separated by ';'.
+ * Returns a new command line with the arguments of the first rule that
+ * matches the program file name, or NULL.
+ */
+static WCHAR *append_child_args( const WCHAR *app_name, const WCHAR *cmd_line )
+{
+    static const WCHAR child_args_variable[] = L"SILICONCELLAR_CHILD_ARGS";
+    const WCHAR *exe_name = app_name, *p;
+    WCHAR *rules, *rule, *next_rule, *rule_args, *new_cmd_line = NULL;
+    DWORD rules_len, new_cmd_line_len;
+
+    if (!(rules_len = GetEnvironmentVariableW( child_args_variable, NULL, 0 ))) return NULL;
+    if (!(rules = RtlAllocateHeap( GetProcessHeap(), 0, rules_len * sizeof(WCHAR) ))) return NULL;
+    if (GetEnvironmentVariableW( child_args_variable, rules, rules_len ) >= rules_len)
+    {
+        HeapFree( GetProcessHeap(), 0, rules );
+        return NULL;
+    }
+
+    for (p = app_name; *p; p++) if (*p == '\\' || *p == '/') exe_name = p + 1;
+
+    for (rule = rules; rule && !new_cmd_line; rule = next_rule)
+    {
+        if ((next_rule = wcschr( rule, ';' ))) *next_rule++ = 0;
+        if (!(rule_args = wcschr( rule, '=' ))) continue;
+        *rule_args++ = 0;
+        if (!*rule_args || wcsicmp( rule, exe_name ) || wcsstr( cmd_line, rule_args )) continue;
+
+        new_cmd_line_len = lstrlenW( cmd_line ) + 1 + lstrlenW( rule_args ) + 1;
+        if (!(new_cmd_line = RtlAllocateHeap( GetProcessHeap(), 0, new_cmd_line_len * sizeof(WCHAR) ))) break;
+        swprintf( new_cmd_line, new_cmd_line_len, L"%s %s", cmd_line, rule_args );
+        TRACE( "appended %s for %s\n", debugstr_w(rule_args), debugstr_w(exe_name) );
+    }
+
+    HeapFree( GetProcessHeap(), 0, rules );
+    return new_cmd_line;
+}
+
 /**********************************************************************
  *           CreateProcessInternalW   (kernelbase.@)
  */
@@ -543,6 +584,12 @@ BOOL WINAPI DECLSPEC_HOTPATCH CreateProcessInternalW( HANDLE token, const WCHAR 
     {
         if (!(tidy_cmdline = get_file_name( cmd_line, name, ARRAY_SIZE(name) ))) return FALSE;
         app_name = name;
+    }
+
+    if ((p = append_child_args( app_name, tidy_cmdline )))
+    {
+        if (tidy_cmdline != cmd_line) HeapFree( GetProcessHeap(), 0, tidy_cmdline );
+        tidy_cmdline = p;
     }
 
     /* CW Hack 24938 */
