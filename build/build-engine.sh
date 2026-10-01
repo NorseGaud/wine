@@ -226,10 +226,6 @@ set_stage_install_names() {
         chmod u+w "$staged_library"
         install_name_tool -id "@rpath/$(basename "$(install_name_of "$staged_library")")" "$staged_library"
     done
-    gstreamer_library_prefix=$(gstreamer_prefix)
-    for gstreamer_pc in "$gstreamer_library_prefix"/lib/pkgconfig/*.pc; do
-        sed -i '' "s|^prefix=.*|prefix=$gstreamer_library_prefix|" "$gstreamer_pc"
-    done
     mark_step_done install-names
 }
 
