@@ -58,7 +58,7 @@ jobs:
         run: |
           mkdir -p dist
           engine_archive="dist/siliconcellar-wine-${ENGINE_TAG}-x86_64.tar.xz"
-          tar -C "$ENGINE_DIR" -cf - bin lib share | xz -T0 -6 > "$engine_archive"
+          tar -C "$ENGINE_DIR" -cf - bin lib libexec share | xz -T0 -6 > "$engine_archive"
           (cd dist && shasum -a 256 "$(basename "$engine_archive")" > "$(basename "$engine_archive").sha256")
           git archive --format=tar --prefix="siliconcellar-wine-${ENGINE_TAG}-source/" HEAD |
             xz -T0 -6 > "dist/siliconcellar-wine-${ENGINE_TAG}-source.tar.xz"

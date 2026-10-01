@@ -29,7 +29,8 @@
     "runtime_url": "https://gstreamer.freedesktop.org/data/pkg/osx/1.28.7/gstreamer-1.0-1.28.7-universal.pkg",
     "runtime_sha256": "529fdf4a4027d942e59b5b3564f6400adaa008f63ce5f3fed4ffe35d73911994",
     "devel_url": "https://gstreamer.freedesktop.org/data/pkg/osx/1.28.7/gstreamer-1.0-devel-1.28.7-universal.pkg",
-    "devel_sha256": "72a44870cf02472cbf6e9a84bcc25ee6807dd1c26659a112066373544d365e7a"
+    "devel_sha256": "72a44870cf02472cbf6e9a84bcc25ee6807dd1c26659a112066373544d365e7a",
+    "skip_packages": "analytics devtools editing gtk python"
   },
   "homebrew": {
     "prefix": "/usr/local",

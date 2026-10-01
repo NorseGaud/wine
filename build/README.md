@@ -8,7 +8,7 @@ This branch holds the Wine source from CodeWeavers CrossOver (branch `crossover`
 build/build-engine.sh <output-dir>
 ```
 
-The output has the folders `bin`, `lib`, and `share`. You can move the folder, because all libraries use `@rpath`.
+The output has the folders `bin`, `lib`, `libexec` (the GStreamer plugin scanner), and `share`. You can move the folder, because all libraries use `@rpath`.
 
 Requirements:
 
@@ -24,7 +24,7 @@ Set `SC_SKIP_SMOKE_TESTS=1` to skip the smoke tests.
 
 1. Check the tools.
 2. Download and check the pinned inputs: the CrossOver source archive, Nettle, GnuTLS, SDL2, llvm-mingw, and GStreamer.
-3. Build GMP, FreeType, and MoltenVK from the CrossOver archive (MoltenVK keeps the CrossOver SPIRV-Cross). Build Nettle, GnuTLS (with the CrossOver source change in `patches/`), and SDL2 from the upstream releases. The CrossOver copies of Nettle and GnuTLS do not build on their own, and Homebrew `sdl2` is now `sdl2-compat`, which loads SDL3 at run time. Expand the GStreamer packages. Give all these libraries `@rpath` install names.
+3. Build GMP, FreeType, and MoltenVK from the CrossOver archive (MoltenVK keeps the CrossOver SPIRV-Cross). Build Nettle, GnuTLS (with the CrossOver source change in `patches/`), and SDL2 from the upstream releases. The CrossOver copies of Nettle and GnuTLS do not build on their own, and Homebrew `sdl2` is now `sdl2-compat`, which loads SDL3 at run time. Expand the GStreamer packages, except the ones in `gstreamer.skip_packages` (GTK, Python, developer tools, analytics, and editing), which Wine does not use for media. Give all these libraries `@rpath` install names.
 4. Configure Wine. The script stops if Wine would open a library from a build path.
 5. Build Wine and run `make install-lib`.
 6. Copy every non-system library into `lib/`, change the references to `@rpath`, and add the rpaths.

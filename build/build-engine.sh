@@ -1,7 +1,7 @@
 #!/bin/sh
 # Build Silicon Cellar Wine (the Engine) into <output-dir>.
 # Usage: build/build-engine.sh <output-dir>
-# Output layout: <output-dir>/{bin,lib,share}. See build/README.md.
+# Output layout: <output-dir>/{bin,lib,libexec,share}. See build/README.md.
 set -eu
 
 if [ "$(uname -m)" = "arm64" ]; then
@@ -180,6 +180,15 @@ build_moltenvk() {
 }
 
 # The GStreamer packages are expanded, not installed, so no root access is needed.
+# is_skipped_gstreamer_package <component package name>: true for the packages in
+# gstreamer.skip_packages (runtime and devel), which Wine does not use for media.
+is_skipped_gstreamer_package() {
+    for skipped_package in $(dep gstreamer.skip_packages); do
+        case "$1" in gstreamer-1.0-"$skipped_package"-[0-9]*|gstreamer-1.0-"$skipped_package"-devel-*) return 0 ;; esac
+    done
+    return 1
+}
+
 stage_gstreamer() {
     step_done gstreamer && return 0
     log "Stage GStreamer $(dep gstreamer.version)"
@@ -188,7 +197,13 @@ stage_gstreamer() {
     for gstreamer_package in "gstreamer-$(dep gstreamer.version).pkg" "gstreamer-devel-$(dep gstreamer.version).pkg"; do
         pkgutil --expand-full "$CACHE_DIR/$gstreamer_package" "$WORK_DIR/gstreamer-expanded/$gstreamer_package"
     done
+    # Merge only the payloads that install into GStreamer.framework/Versions/1.0. The framework
+    # package adds only symlinks (Headers -> Versions/Current/Headers) that collide with them.
     find "$WORK_DIR/gstreamer-expanded" -type d -name Payload | while read -r gstreamer_payload; do
+        component_package=$(dirname "$gstreamer_payload")
+        install_location=$(sed -n 's/.*install-location="\([^"]*\)".*/\1/p' "$component_package/PackageInfo" | head -n 1)
+        case "${install_location%/}" in */Versions/1.0) ;; *) continue ;; esac
+        is_skipped_gstreamer_package "$(basename "$component_package")" && continue
         ditto "$gstreamer_payload" "$GSTREAMER_ROOT"
     done
     rm -rf "$WORK_DIR/gstreamer-expanded"
@@ -262,7 +277,7 @@ build_wine() {
 
 install_wine() {
     log "Install Wine into $OUTPUT_DIR"
-    rm -rf "$OUTPUT_DIR/bin" "$OUTPUT_DIR/lib" "$OUTPUT_DIR/share"
+    rm -rf "$OUTPUT_DIR/bin" "$OUTPUT_DIR/lib" "$OUTPUT_DIR/libexec" "$OUTPUT_DIR/share"
     make -C "$WINE_BUILD_DIR" install-lib
 }
 
@@ -271,7 +286,7 @@ install_wine() {
 is_macho() { file -b "$1" | grep -q 'Mach-O'; }
 
 list_output_machos() {
-    find "$OUTPUT_DIR/bin" "$OUTPUT_DIR/lib" -type f \( -perm -100 -o -name '*.so' -o -name '*.dylib' \) | while read -r output_file; do
+    find "$OUTPUT_DIR/bin" "$OUTPUT_DIR/lib" "$OUTPUT_DIR/libexec" -type f \( -perm -100 -o -name '*.so' -o -name '*.dylib' \) | while read -r output_file; do
         is_macho "$output_file" && echo "$output_file"
     done
 }
@@ -282,12 +297,24 @@ rpath_for() {
         "$OUTPUT_DIR"/bin/*) echo "@loader_path/../lib" ;;
         "$OUTPUT_DIR"/lib/wine/*/*) echo "@loader_path/../.." ;;
         "$OUTPUT_DIR"/lib/gstreamer-1.0/*) echo "@loader_path/.." ;;
+        "$OUTPUT_DIR"/libexec/gstreamer-1.0/*) echo "@loader_path/../../lib" ;;
         *) echo "@loader_path" ;;
     esac
 }
 
 add_rpath_once() {
     otool -l "$2" | grep -q "path $1 (offset" || install_name_tool -add_rpath "$1" "$2"
+}
+
+list_rpaths() { otool -l "$1" | awk '$1 == "cmd" && $2 == "LC_RPATH" { getline; getline; print $2 }'; }
+
+# The GStreamer .pc files add -Wl,-rpath to the stage folder. Remove rpaths into build folders.
+remove_build_rpaths() {
+    list_rpaths "$1" | while read -r build_rpath; do
+        case "$build_rpath" in
+            "$WORK_DIR"/*|"$BREW_PREFIX"/*|/Library/Frameworks/GStreamer.framework/*) install_name_tool -delete_rpath "$build_rpath" "$1" ;;
+        esac
+    done
 }
 
 # find_library_source <dependency path>: the staged or Homebrew file for a dependency.
@@ -345,6 +372,7 @@ relink_macho() {
     case "$own_install_name" in
         "$WORK_DIR"/*|"$BREW_PREFIX"/*) install_name_tool -id "@rpath/$(basename "$1")" "$1" ;;
     esac
+    remove_build_rpaths "$1"
     add_rpath_once "$(rpath_for "$1")" "$1"
 }
 
@@ -358,6 +386,10 @@ bundle_libraries() {
     for gstreamer_plugin in "$gstreamer_library_prefix"/lib/gstreamer-1.0/*.dylib; do
         copy_x86_64 "$gstreamer_plugin" "$OUTPUT_DIR/lib/gstreamer-1.0/$(basename "$gstreamer_plugin")"
     done
+    # GStreamer finds the scanner at ../libexec/gstreamer-1.0 from libgstreamer.
+    mkdir -p "$OUTPUT_DIR/libexec/gstreamer-1.0"
+    copy_x86_64 "$gstreamer_library_prefix/libexec/gstreamer-1.0/gst-plugin-scanner" \
+        "$OUTPUT_DIR/libexec/gstreamer-1.0/gst-plugin-scanner"
 
     relink_log="$WORK_DIR/relink.log"
     relink_pass=1
@@ -447,7 +479,8 @@ smoke_tests() {
     "$OUTPUT_DIR/bin/wineserver" -k || true
 
     bad_links=$(list_output_machos | while read -r output_macho; do
-        otool -L "$output_macho" | tail -n +2 | grep -e "$BREW_PREFIX/" -e "$WORK_DIR" | sed "s|^|$output_macho: |"
+        { otool -L "$output_macho" | tail -n +2; list_rpaths "$output_macho"; } |
+            grep -e "$BREW_PREFIX/" -e "$WORK_DIR" | sed "s|^|$output_macho: |"
     done || true)
     [ -z "$bad_links" ] || die "libraries still point at build paths:
 $bad_links"
