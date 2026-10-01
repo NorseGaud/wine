@@ -422,9 +422,9 @@ copy_licenses() {
 write_build_info() {
     {
         echo "source: $(git -C "$SOURCE_ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
-        echo "crossover: $(dep crossover.version)"
-        echo "llvm-mingw: $(dep llvm_mingw.version)"
-        echo "gstreamer: $(dep gstreamer.version)"
+        for pinned_input in crossover nettle gnutls sdl2 llvm_mingw gstreamer; do
+            echo "$pinned_input: $(dep "$pinned_input.version")"
+        done
         echo "macos-sdk: $(xcrun --show-sdk-version)"
         echo "xcode: $(xcodebuild -version | head -n 1)"
         # shellcheck disable=SC2086
