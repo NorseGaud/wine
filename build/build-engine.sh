@@ -189,7 +189,7 @@ stage_gstreamer() {
     step_done gstreamer && return 0
     log "Stage GStreamer $(dep gstreamer.version)"
     rm -rf "$GSTREAMER_ROOT" "$WORK_DIR/gstreamer-expanded"
-    mkdir -p "$GSTREAMER_ROOT"
+    mkdir -p "$GSTREAMER_ROOT" "$WORK_DIR/gstreamer-expanded"
     for gstreamer_package in "gstreamer-$(dep gstreamer.version).pkg" "gstreamer-devel-$(dep gstreamer.version).pkg"; do
         pkgutil --expand-full "$CACHE_DIR/$gstreamer_package" "$WORK_DIR/gstreamer-expanded/$gstreamer_package"
     done
