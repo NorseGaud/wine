@@ -561,6 +561,9 @@ enum loadorder
 extern void set_load_order_app_name( const WCHAR *app_name );
 extern enum loadorder get_load_order( const UNICODE_STRING *nt_name );
 
+extern char *app_dll_path;
+extern void init_app_renderer( const WCHAR *image_path, SIZE_T image_path_length );
+
 static inline WCHAR ntdll_towupper( WCHAR ch )
 {
     return ch + uctable[uctable[uctable[ch >> 8] + ((ch >> 4) & 0x0f)] + (ch & 0x0f)];

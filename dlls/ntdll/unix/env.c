@@ -1047,6 +1047,7 @@ static void add_dynamic_environment( WCHAR **env, SIZE_T *pos, SIZE_T *size )
     }
     snprintf( str, sizeof(str), "WINEDLLDIR%u", i );
     append_envW( env, pos, size, str, NULL );
+    add_path_var( env, pos, size, "WINEAPPDLLDIR", app_dll_path );
     add_system_dll_path_var( env, pos, size );
     append_envA( env, pos, size, "WINEUSERNAME", user_name );
     if (unix_cp.CodePage != CP_UTF8)
@@ -1914,7 +1915,6 @@ static RTL_USER_PROCESS_PARAMETERS *build_initial_params( void **module )
     is_prefix_bootstrap = !!bootstrap;
     free( bootstrap );
     add_registry_environment( &env, &env_pos, &env_size );
-    env[env_pos++] = 0;
 
     get_full_path( main_argv[1], curdir, &nt_name );
     status = load_main_exe( &nt_name, 0, module );
@@ -1955,6 +1955,9 @@ static RTL_USER_PROCESS_PARAMETERS *build_initial_params( void **module )
 
     main_wargv = build_wargv( get_dos_path( nt_name.Buffer ));
     cmdline = build_command_line( main_wargv );
+    init_app_renderer( main_wargv[0], wcslen( main_wargv[0] ));
+    add_path_var( &env, &env_pos, &env_size, "WINEAPPDLLDIR", app_dll_path );
+    env[env_pos++] = 0;
 
     TRACE( "image %s cmdline %s dir %s\n",
            debugstr_w(main_wargv[0]), debugstr_w(cmdline), debugstr_w(curdir) );
@@ -2036,6 +2039,8 @@ void init_startup_info(void)
     env = malloc( env_size * sizeof(WCHAR) );
     memcpy( env, (char *)info + info_size, env_size * sizeof(WCHAR) );
     env_pos = env_size - 1;
+    init_app_renderer( (const WCHAR *)(info + 1) + (info->curdir_len + info->dllpath_len) / sizeof(WCHAR),
+                       info->imagepath_len / sizeof(WCHAR) );
     add_dynamic_environment( &env, &env_pos, &env_size );
     is_prefix_bootstrap = !!find_env_var( env, env_pos, bootstrapW, ARRAY_SIZE(bootstrapW) );
     env[env_pos++] = 0;

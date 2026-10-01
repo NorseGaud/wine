@@ -43,7 +43,7 @@ Set `SC_SKIP_SMOKE_TESTS=1` to skip the smoke tests.
 - `SILICONCELLAR_CHILD_ARGS`: rules `exe=arguments` separated by `;`. A matching child process gets the arguments at the end of its command line.
 - `FullscreenBelowNotch`: Mac Driver option for each app (`HKCU\Software\Wine\AppDefaults\<app>.exe\Mac Driver`). Fullscreen stays below the camera housing.
 - Renderer for each app (`HKCU\Software\Wine\AppDefaults\<app>.exe\SiliconCellar`), read when the process starts:
-  - `DllPath`: a Unix folder with `x86_64-windows`, `i386-windows` and `x86_64-unix`. Wine searches it before its own DLL folder, for that app only. Steam and other apps in the same session keep the Wine DLLs. This replaces CrossOver's closed `cxcompatdb.so`, which calls `prepend_dll_path()`.
+  - `DllPath`: a Unix folder with `x86_64-windows`, `i386-windows` and `x86_64-unix`. Wine searches it before its own DLL folder, for that app only. Steam and other apps in the same session keep the Wine DLLs. This replaces CrossOver's closed `cxcompatdb.so`, which calls `prepend_dll_path()`. The folder can also add DLLs that Wine does not have (for example DXMT `winemetal.dll`): Wine loads a builtin DLL only if a file with that name is on the Windows search path, so the Unix side exports the folder to that app as `WINEAPPDLLDIR`, and the PE loader looks there when the Windows search path has no file.
   - `D3DSharedPath`: the Unix path of D3DMetal's `libd3dshared.dylib`. It replaces `CX_APPLEGPTK_LIBD3DSHARED_PATH` for that app.
 
 ## Releases

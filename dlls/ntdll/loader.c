@@ -3742,6 +3742,18 @@ static NTSTATUS find_builtin_without_file( const WCHAR *name, UNICODE_STRING *ne
 
     if (contains_path( name )) return status;
 
+    /* Silicon Cellar: DLLs that only the renderer package of this app has (for example DXMT winemetal.dll).
+     * WINEAPPDLLDIR comes from AppDefaults\<app.exe>\SiliconCellar\DllPath. */
+    if (!get_env_var( L"WINEAPPDLLDIR", wcslen(pe_dir) + wcslen(name) + 1, new_name ))
+    {
+        RtlAppendUnicodeToString( new_name, pe_dir );
+        RtlAppendUnicodeToString( new_name, L"\\" );
+        RtlAppendUnicodeToString( new_name, name );
+        status = open_dll_file( new_name, pwm, mapping, image_info, id );
+        if (status != STATUS_DLL_NOT_FOUND) goto done;
+        RtlFreeUnicodeString( new_name );
+    }
+
     /* CW HACK 20810: In Wow64/32-bit-bottle mode, 64-bit DLLs (like wow64*) won't be present in the prefix. */
     if (!is_prefix_bootstrap && !wow64_using_32bit_prefix)
     {

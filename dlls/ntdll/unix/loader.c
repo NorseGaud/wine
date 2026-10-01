@@ -323,6 +323,7 @@ void prepend_dll_path(const char *path)
  *   DllPath:       Unix folder that is searched before the Wine DLL folder.
  *   D3DSharedPath: Unix path of libd3dshared.dylib, used instead of CX_APPLEGPTK_LIBD3DSHARED_PATH.
  * Other processes in the same session keep the Wine DLLs. */
+char *app_dll_path;
 static char *app_d3dshared_path;
 
 static char *get_app_renderer_value( HANDLE key, const WCHAR *name )
@@ -351,35 +352,40 @@ static char *get_app_renderer_value( HANDLE key, const WCHAR *name )
     return value;
 }
 
-static void init_app_renderer( const WCHAR *app_name )
+/* Called with the image path before the process environment is built, so that
+ * add_dynamic_environment can export app_dll_path as WINEAPPDLLDIR. */
+void init_app_renderer( const WCHAR *image_path, SIZE_T image_path_length )
 {
-    static const WCHAR settingsW[] = {'\\','S','i','l','i','c','o','n','C','e','l','l','a','r',0};
+    static const WCHAR settingsW[] = {'\\','S','i','l','i','c','o','n','C','e','l','l','a','r'};
     static const WCHAR dll_pathW[] = {'D','l','l','P','a','t','h',0};
     static const WCHAR d3dshared_pathW[] = {'D','3','D','S','h','a','r','e','d','P','a','t','h',0};
+    const WCHAR *app_name = image_path;
+    SIZE_T i, app_name_length;
     OBJECT_ATTRIBUTES attr;
     UNICODE_STRING nameW;
     HANDLE root, key;
-    const WCHAR *p;
-    char *dll_path;
 
-    if ((p = wcsrchr( app_name, '\\' ))) app_name = p + 1;
+    for (i = 0; i < image_path_length; i++)
+        if (image_path[i] == '\\' || image_path[i] == '/') app_name = image_path + i + 1;
+    app_name_length = image_path + image_path_length - app_name;
+    if (!app_name_length) return;
     if (open_hkcu_key( "Software\\Wine\\AppDefaults", &root )) return;
-    if (!(nameW.Buffer = malloc( (wcslen( app_name ) + ARRAY_SIZE(settingsW)) * sizeof(WCHAR) )))
+    nameW.Length = (app_name_length + ARRAY_SIZE(settingsW)) * sizeof(WCHAR);
+    nameW.MaximumLength = nameW.Length;
+    if (!(nameW.Buffer = malloc( nameW.Length )))
     {
         NtClose( root );
         return;
     }
-    wcscpy( nameW.Buffer, app_name );
-    wcscat( nameW.Buffer, settingsW );
-    nameW.Length = wcslen( nameW.Buffer ) * sizeof(WCHAR);
-    nameW.MaximumLength = nameW.Length + sizeof(WCHAR);
+    memcpy( nameW.Buffer, app_name, app_name_length * sizeof(WCHAR) );
+    memcpy( nameW.Buffer + app_name_length, settingsW, sizeof(settingsW) );
     InitializeObjectAttributes( &attr, &nameW, 0, root, NULL );
     if (!NtOpenKey( &key, KEY_QUERY_VALUE, &attr ))
     {
-        if ((dll_path = get_app_renderer_value( key, dll_pathW )))
+        if ((app_dll_path = get_app_renderer_value( key, dll_pathW )))
         {
-            TRACE( "DLL folder %s for %s\n", debugstr_a(dll_path), debugstr_w(app_name) );
-            prepend_dll_path( dll_path );
+            TRACE( "DLL folder %s for %s\n", debugstr_a(app_dll_path), debugstr_wn(app_name, app_name_length) );
+            prepend_dll_path( app_dll_path );
         }
         app_d3dshared_path = get_app_renderer_value( key, d3dshared_pathW );
         NtClose( key );
@@ -2175,7 +2181,6 @@ static void start_main_thread(void)
     init_startup_info();
     *(ULONG_PTR *)&peb->CloudFileFlags = get_image_address();
     set_load_order_app_name( main_wargv[0] );
-    init_app_renderer( main_wargv[0] );
     init_thread_stack( teb, 0, 0, 0 );
     NtCreateKeyedEvent( &keyed_event, GENERIC_READ | GENERIC_WRITE, NULL, 0 );
     load_ntdll();
