@@ -256,8 +256,14 @@ configure_wine() {
     mark_step_done wine-configure
 }
 
-# Every library that Wine opens by path must come from the stage (@rpath) or the system.
-# Bare names (the libodbc fallback when ODBC is not found) use the normal dyld search.
+# list_wine_sonames: the file name of each library that Wine opens at run time.
+# On macOS, WINE_CHECK_SONAME keeps only the file name, and dyld finds it through
+# the rpath of the Wine .so files (<Engine>/lib) or in the system.
+list_wine_sonames() {
+    sed -n 's|^#define SONAME_[A-Z0-9_]* "\(.*/\)\{0,1\}\([^/"]*\)"$|\2|p' "$WINE_BUILD_DIR/include/config.h"
+}
+
+# A SONAME with a folder must be in the system, never in a build folder.
 check_wine_sonames() {
     wrong_sonames=$(grep '^#define SONAME_' "$WINE_BUILD_DIR/include/config.h" |
         grep -v -e '"@rpath/' -e '"/usr/lib/' -e '"/System/' -e '"[^/"]*"' || true)
@@ -376,7 +382,8 @@ relink_macho() {
 bundle_libraries() {
     log "Bundle libraries"
     gstreamer_library_prefix=$(gstreamer_prefix)
-    grep '^#define SONAME_' "$WINE_BUILD_DIR/include/config.h" | sed -n 's|.*"@rpath/\(.*\)".*|\1|p' | while read -r opened_library; do
+    list_wine_sonames | while read -r opened_library; do
+        [ -f "$STAGE_DIR/lib/$opened_library" ] || continue
         copy_library_to_output "$STAGE_DIR/lib/$opened_library" || true
     done
     mkdir -p "$OUTPUT_DIR/lib/gstreamer-1.0"
@@ -456,6 +463,21 @@ build_probes() {
     done
 }
 
+# Each staged library that Wine opens must be in the Engine and load with all its dependencies.
+check_opened_libraries() {
+    load_probe="$WORK_DIR/probe/load-libraries"
+    clang -arch x86_64 -O2 -Wl,-rpath,"$OUTPUT_DIR/lib" -o "$load_probe" "$SOURCE_ROOT/build/probe/load-libraries.c"
+    bundled_sonames=""
+    for opened_library in $(list_wine_sonames); do
+        [ -f "$STAGE_DIR/lib/$opened_library" ] || continue
+        [ -f "$OUTPUT_DIR/lib/$opened_library" ] || die "Wine opens $opened_library, but it is not in $OUTPUT_DIR/lib"
+        bundled_sonames="$bundled_sonames $opened_library"
+    done
+    [ -n "$bundled_sonames" ] || die "no staged library found in the Wine SONAMEs"
+    # shellcheck disable=SC2086
+    "$load_probe" $bundled_sonames || die "some libraries that Wine opens do not load"
+}
+
 smoke_tests() {
     log "Smoke tests"
     smoke_prefix=$(mktemp -d "${TMPDIR:-/tmp}/sc-engine-prefix.XXXXXX")
@@ -474,6 +496,8 @@ smoke_tests() {
         run_with_timeout 300 "$wine_binary" "$WORK_DIR/probe/$probe_name.exe" || die "probe $probe_name failed"
     done
     "$OUTPUT_DIR/bin/wineserver" -k || true
+
+    check_opened_libraries
 
     bad_links=$(list_output_machos | while read -r output_macho; do
         { otool -L "$output_macho" | tail -n +2; list_rpaths "$output_macho"; } |
