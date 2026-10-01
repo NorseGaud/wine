@@ -249,7 +249,7 @@ configure_wine() {
         # shellcheck disable=SC2086
         "$SOURCE_ROOT/configure" --prefix="$OUTPUT_DIR" $WINE_CONFIGURE_OPTIONS \
             CPPFLAGS="-I$STAGE_DIR/include" \
-            LDFLAGS="-L$STAGE_DIR/lib -Wl,-headerpad_max_install_names" \
+            LDFLAGS="-L$STAGE_DIR/lib -Wl,-rpath,$STAGE_DIR/lib -Wl,-headerpad_max_install_names" \
             PKG_CONFIG_LIBDIR="$STAGE_DIR/lib/pkgconfig:$gstreamer_library_prefix/lib/pkgconfig"
     )
     check_wine_sonames
