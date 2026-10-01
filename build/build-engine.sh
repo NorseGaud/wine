@@ -141,9 +141,11 @@ build_libraries() {
     if [ ! -f "$SOURCES_DIR/sources/freetype/builds/unix/configure" ]; then
         (cd "$SOURCES_DIR/sources/freetype" && LIBTOOLIZE=glibtoolize ./autogen.sh)
     fi
-    # The archive has an empty dlg submodule. dlg is used only with FT_DEBUG_LOGGING, and
-    # FreeType setup skips the submodule checkout when src/dlg/dlg.* exists.
-    touch "$SOURCES_DIR/sources/freetype/src/dlg/dlg.c"
+    # The archive has an empty dlg submodule. dlg is compiled only with FT_DEBUG_LOGGING, but
+    # the make rules need its files to exist (src/dlg/rules.mk and the setup checkout check).
+    freetype_source="$SOURCES_DIR/sources/freetype"
+    mkdir -p "$freetype_source/include/dlg"
+    touch "$freetype_source/src/dlg/dlg.c" "$freetype_source/include/dlg/dlg.h" "$freetype_source/include/dlg/output.h"
     build_autotools freetype "$SOURCES_DIR/sources/freetype" \
         --without-harfbuzz --without-png --without-brotli --without-bzip2
     build_moltenvk
