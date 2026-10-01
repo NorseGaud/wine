@@ -318,6 +318,76 @@ void prepend_dll_path(const char *path)
         dll_path_maxlen = path_len;
 }
 
+/* Silicon Cellar: renderer settings for one app, in
+ * HKCU\Software\Wine\AppDefaults\<app.exe>\SiliconCellar
+ *   DllPath:       Unix folder that is searched before the Wine DLL folder.
+ *   D3DSharedPath: Unix path of libd3dshared.dylib, used instead of CX_APPLEGPTK_LIBD3DSHARED_PATH.
+ * Other processes in the same session keep the Wine DLLs. */
+static char *app_d3dshared_path;
+
+static char *get_app_renderer_value( HANDLE key, const WCHAR *name )
+{
+    char buffer[offsetof( KEY_VALUE_PARTIAL_INFORMATION, Data[4096] )];
+    KEY_VALUE_PARTIAL_INFORMATION *info = (KEY_VALUE_PARTIAL_INFORMATION *)buffer;
+    const WCHAR *text = (const WCHAR *)info->Data;
+    UNICODE_STRING nameW;
+    DWORD size, text_length;
+    char *value;
+    int value_length;
+
+    init_unicode_string( &nameW, name );
+    if (NtQueryValueKey( key, &nameW, KeyValuePartialInformation, buffer, sizeof(buffer), &size )) return NULL;
+    if (info->Type != REG_SZ) return NULL;
+    text_length = info->DataLength / sizeof(WCHAR);
+    if (text_length && !text[text_length - 1]) text_length--;
+    if (!text_length || !(value = malloc( text_length * 3 + 1 ))) return NULL;
+    value_length = ntdll_wcstoumbs( text, text_length, value, text_length * 3, FALSE );
+    if (value_length <= 0)
+    {
+        free( value );
+        return NULL;
+    }
+    value[value_length] = 0;
+    return value;
+}
+
+static void init_app_renderer( const WCHAR *app_name )
+{
+    static const WCHAR settingsW[] = {'\\','S','i','l','i','c','o','n','C','e','l','l','a','r',0};
+    static const WCHAR dll_pathW[] = {'D','l','l','P','a','t','h',0};
+    static const WCHAR d3dshared_pathW[] = {'D','3','D','S','h','a','r','e','d','P','a','t','h',0};
+    OBJECT_ATTRIBUTES attr;
+    UNICODE_STRING nameW;
+    HANDLE root, key;
+    const WCHAR *p;
+    char *dll_path;
+
+    if ((p = wcsrchr( app_name, '\\' ))) app_name = p + 1;
+    if (open_hkcu_key( "Software\\Wine\\AppDefaults", &root )) return;
+    if (!(nameW.Buffer = malloc( (wcslen( app_name ) + ARRAY_SIZE(settingsW)) * sizeof(WCHAR) )))
+    {
+        NtClose( root );
+        return;
+    }
+    wcscpy( nameW.Buffer, app_name );
+    wcscat( nameW.Buffer, settingsW );
+    nameW.Length = wcslen( nameW.Buffer ) * sizeof(WCHAR);
+    nameW.MaximumLength = nameW.Length + sizeof(WCHAR);
+    InitializeObjectAttributes( &attr, &nameW, 0, root, NULL );
+    if (!NtOpenKey( &key, KEY_QUERY_VALUE, &attr ))
+    {
+        if ((dll_path = get_app_renderer_value( key, dll_pathW )))
+        {
+            TRACE( "DLL folder %s for %s\n", debugstr_a(dll_path), debugstr_w(app_name) );
+            prepend_dll_path( dll_path );
+        }
+        app_d3dshared_path = get_app_renderer_value( key, d3dshared_pathW );
+        NtClose( key );
+    }
+    NtClose( root );
+    free( nameW.Buffer );
+}
+
 static void set_dll_path(void)
 {
     char *p, *path = getenv( "WINEDLLPATH" );
@@ -1194,7 +1264,7 @@ static BOOL sonoma_or_later(void)
 
 static void init_non_native_support(void)
 {
-    char *libd3dshared_path = getenv( "CX_APPLEGPTK_LIBD3DSHARED_PATH" );
+    char *libd3dshared_path = app_d3dshared_path ? app_d3dshared_path : getenv( "CX_APPLEGPTK_LIBD3DSHARED_PATH" );
 
     register_non_native_code_region = NULL;
     supports_non_native_code_regions = NULL;
@@ -2105,6 +2175,7 @@ static void start_main_thread(void)
     init_startup_info();
     *(ULONG_PTR *)&peb->CloudFileFlags = get_image_address();
     set_load_order_app_name( main_wargv[0] );
+    init_app_renderer( main_wargv[0] );
     init_thread_stack( teb, 0, 0, 0 );
     NtCreateKeyedEvent( &keyed_event, GENERIC_READ | GENERIC_WRITE, NULL, 0 );
     load_ntdll();

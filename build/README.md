@@ -34,6 +34,7 @@ Set `SC_SKIP_SMOKE_TESTS=1` to skip the smoke tests.
 
 - `probe/boolean-args.c`: calls `NtQueryDirectoryObject` with dirty upper bits in the `BOOLEAN` arguments. The enumeration must end.
 - `probe/child-args.c`: checks that `SILICONCELLAR_CHILD_ARGS` adds arguments to a child process one time only.
+- `probe/app-dll-path.c` and `probe/app-dll-path-lib.c`: the build marks the library as builtin (`winebuild --builtin`) and puts it only in a temporary folder. The probe sets `DllPath` for one copy of itself. That copy must load the library, and a copy with another name must not find it.
 - `probe/load-libraries.c`: a macOS program (not Windows) with an rpath to `lib/`. It opens each SONAME library by file name, in the same way as Wine.
 
 ## Fixes on this branch
@@ -41,6 +42,9 @@ Set `SC_SKIP_SMOKE_TESTS=1` to skip the smoke tests.
 - Backport of the upstream Wine `BOOLEAN` syscall fix (`d1415ab24e`, `f43402cde3`, `565091afa4`).
 - `SILICONCELLAR_CHILD_ARGS`: rules `exe=arguments` separated by `;`. A matching child process gets the arguments at the end of its command line.
 - `FullscreenBelowNotch`: Mac Driver option for each app (`HKCU\Software\Wine\AppDefaults\<app>.exe\Mac Driver`). Fullscreen stays below the camera housing.
+- Renderer for each app (`HKCU\Software\Wine\AppDefaults\<app>.exe\SiliconCellar`), read when the process starts:
+  - `DllPath`: a Unix folder with `x86_64-windows`, `i386-windows` and `x86_64-unix`. Wine searches it before its own DLL folder, for that app only. Steam and other apps in the same session keep the Wine DLLs. This replaces CrossOver's closed `cxcompatdb.so`, which calls `prepend_dll_path()`.
+  - `D3DSharedPath`: the Unix path of D3DMetal's `libd3dshared.dylib`. It replaces `CX_APPLEGPTK_LIBD3DSHARED_PATH` for that app.
 
 ## Releases
 

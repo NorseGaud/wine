@@ -461,6 +461,12 @@ build_probes() {
     for probe_name in boolean-args child-args; do
         x86_64-w64-mingw32-clang -O2 -o "$probe_output_dir/$probe_name.exe" "$SOURCE_ROOT/build/probe/$probe_name.c"
     done
+    x86_64-w64-mingw32-clang -O2 -municode -o "$probe_output_dir/app-dll-path.exe" "$SOURCE_ROOT/build/probe/app-dll-path.c"
+    app_dll_folder="$probe_output_dir/app-dll"
+    app_dll_file="$app_dll_folder/x86_64-windows/sc-app-dll-path.dll"
+    mkdir -p "$(dirname "$app_dll_file")"
+    x86_64-w64-mingw32-clang -O2 -shared -o "$app_dll_file" "$SOURCE_ROOT/build/probe/app-dll-path-lib.c"
+    "$WINE_BUILD_DIR/tools/winebuild/winebuild" --builtin "$app_dll_file"
 }
 
 # Each staged library that Wine opens must be in the Engine and load with all its dependencies.
@@ -495,6 +501,7 @@ smoke_tests() {
     for probe_name in boolean-args child-args; do
         run_with_timeout 300 "$wine_binary" "$WORK_DIR/probe/$probe_name.exe" || die "probe $probe_name failed"
     done
+    run_with_timeout 300 "$wine_binary" "$WORK_DIR/probe/app-dll-path.exe" "$app_dll_folder" || die "probe app-dll-path failed"
     "$OUTPUT_DIR/bin/wineserver" -k || true
 
     check_opened_libraries
