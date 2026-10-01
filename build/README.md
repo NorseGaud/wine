@@ -13,7 +13,7 @@ The output has the folders `bin`, `lib`, and `share`. You can move the folder, b
 Requirements:
 
 - x86_64 Homebrew in `/usr/local`. On Apple Silicon, install it with `arch -x86_64`. The script starts itself under `arch -x86_64`.
-- The Homebrew formulas in `deps.json` (`homebrew.build_formulas` and `homebrew.runtime_formulas`). The script stops and shows the install command if one is missing.
+- The Homebrew formulas in `deps.json` (`homebrew.build_formulas`). These are build tools only. No Homebrew library goes into the output. The script stops and shows the install command if one is missing.
 - Xcode (for MoltenVK).
 
 The script downloads the pinned inputs in `deps.json` into `.work/cache` and checks each SHA-256. Work files go into `.work` (set `SC_WORK_DIR` to change this). A new run skips the steps that are complete. To build again from the start, remove `.work/stage` and `.work/wine-build`.
@@ -23,8 +23,8 @@ Set `SC_SKIP_SMOKE_TESTS=1` to skip the smoke tests.
 ## Steps
 
 1. Check the tools.
-2. Download and check the pinned inputs: the CrossOver source archive, llvm-mingw, and GStreamer.
-3. Build GMP, Nettle, GnuTLS, FreeType, and MoltenVK from the CrossOver archive (MoltenVK keeps the CrossOver SPIRV-Cross). Copy SDL2 from Homebrew. Expand the GStreamer packages. Give all these libraries `@rpath` install names.
+2. Download and check the pinned inputs: the CrossOver source archive, Nettle, GnuTLS, SDL2, llvm-mingw, and GStreamer.
+3. Build GMP, FreeType, and MoltenVK from the CrossOver archive (MoltenVK keeps the CrossOver SPIRV-Cross). Build Nettle, GnuTLS (with the CrossOver source change in `patches/`), and SDL2 from the upstream releases. The CrossOver copies of Nettle and GnuTLS do not build on their own, and Homebrew `sdl2` is now `sdl2-compat`, which loads SDL3 at run time. Expand the GStreamer packages. Give all these libraries `@rpath` install names.
 4. Configure Wine. The script stops if Wine would open a library from a build path.
 5. Build Wine and run `make install-lib`.
 6. Copy every non-system library into `lib/`, change the references to `@rpath`, and add the rpaths.

@@ -35,13 +35,14 @@ mark_step_done() { echo "$OUTPUT_DIR" > "$STAGE_DIR/.done-$1"; }
 
 BREW_PREFIX=$(dep homebrew.prefix)
 BUILD_FORMULAS=$(dep homebrew.build_formulas)
-RUNTIME_FORMULAS=$(dep homebrew.runtime_formulas)
 LLVM_MINGW_DIR="$SOURCES_DIR/llvm-mingw-$(dep llvm_mingw.version)"
 # The CrossOver copies of Nettle and GnuTLS have CrossOver build files that do not
 # build on their own. The upstream releases are used, plus the CrossOver GnuTLS
 # source change in build/patches.
 NETTLE_SOURCE_DIR="$SOURCES_DIR/nettle-$(dep nettle.version)"
 GNUTLS_SOURCE_DIR="$SOURCES_DIR/gnutls-$(dep gnutls.version)"
+# Homebrew sdl2 is now sdl2-compat, which loads SDL3 at run time. Build the real SDL2.
+SDL2_SOURCE_DIR="$SOURCES_DIR/SDL2-$(dep sdl2.version)"
 GSTREAMER_ROOT="$STAGE_DIR/gstreamer"
 
 export PATH="$BREW_PREFIX/opt/bison/bin:$BREW_PREFIX/opt/flex/bin:$BREW_PREFIX/opt/gettext/bin:$BREW_PREFIX/bin:/usr/bin:/bin:/usr/sbin:/sbin:$LLVM_MINGW_DIR/bin"
@@ -53,7 +54,7 @@ check_tools() {
     [ -x "$BREW_PREFIX/bin/brew" ] || die "x86_64 Homebrew not found in $BREW_PREFIX. Install it with:
   arch -x86_64 /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
     missing_formulas=""
-    for formula in $BUILD_FORMULAS $RUNTIME_FORMULAS; do
+    for formula in $BUILD_FORMULAS; do
         "$BREW_PREFIX/bin/brew" list --versions "$formula" >/dev/null 2>&1 || missing_formulas="$missing_formulas $formula"
     done
     [ -z "$missing_formulas" ] || die "missing Homebrew formulas. Install them with:
@@ -81,16 +82,18 @@ fetch_inputs() {
     fetch_pinned "$(dep crossover.url)" "$(dep crossover.sha256)" "crossover-sources-$(dep crossover.version).tar.gz"
     fetch_pinned "$(dep nettle.url)" "$(dep nettle.sha256)" "nettle-$(dep nettle.version).tar.gz"
     fetch_pinned "$(dep gnutls.url)" "$(dep gnutls.sha256)" "gnutls-$(dep gnutls.version).tar.xz"
+    fetch_pinned "$(dep sdl2.url)" "$(dep sdl2.sha256)" "SDL2-$(dep sdl2.version).tar.gz"
     fetch_pinned "$(dep llvm_mingw.url)" "$(dep llvm_mingw.sha256)" "llvm-mingw-$(dep llvm_mingw.version).tar.xz"
     fetch_pinned "$(dep gstreamer.runtime_url)" "$(dep gstreamer.runtime_sha256)" "gstreamer-$(dep gstreamer.version).pkg"
     fetch_pinned "$(dep gstreamer.devel_url)" "$(dep gstreamer.devel_sha256)" "gstreamer-devel-$(dep gstreamer.version).pkg"
 
     if ! step_done extract; then
         log "Extract inputs"
-        rm -rf "$SOURCES_DIR/sources" "$NETTLE_SOURCE_DIR" "$GNUTLS_SOURCE_DIR" "$LLVM_MINGW_DIR"
+        rm -rf "$SOURCES_DIR/sources" "$NETTLE_SOURCE_DIR" "$GNUTLS_SOURCE_DIR" "$SDL2_SOURCE_DIR" "$LLVM_MINGW_DIR"
         tar -xzf "$CACHE_DIR/crossover-sources-$(dep crossover.version).tar.gz" -C "$SOURCES_DIR" \
             sources/freetype sources/gnutls/gmp sources/moltenvk
-        mkdir -p "$NETTLE_SOURCE_DIR" "$GNUTLS_SOURCE_DIR"
+        mkdir -p "$NETTLE_SOURCE_DIR" "$GNUTLS_SOURCE_DIR" "$SDL2_SOURCE_DIR"
+        tar -xzf "$CACHE_DIR/SDL2-$(dep sdl2.version).tar.gz" -C "$SDL2_SOURCE_DIR" --strip-components 1
         tar -xzf "$CACHE_DIR/nettle-$(dep nettle.version).tar.gz" -C "$NETTLE_SOURCE_DIR" --strip-components 1
         tar -xJf "$CACHE_DIR/gnutls-$(dep gnutls.version).tar.xz" -C "$GNUTLS_SOURCE_DIR" --strip-components 1
         patch -d "$GNUTLS_SOURCE_DIR" -p1 < "$SOURCE_ROOT/build/patches/gnutls-$(dep gnutls.version)-client-hello-order.patch"
@@ -148,8 +151,8 @@ build_libraries() {
     touch "$freetype_source/src/dlg/dlg.c" "$freetype_source/include/dlg/dlg.h" "$freetype_source/include/dlg/output.h"
     build_autotools freetype "$SOURCES_DIR/sources/freetype" \
         --without-harfbuzz --without-png --without-brotli --without-bzip2
+    build_autotools sdl2 "$SDL2_SOURCE_DIR"
     build_moltenvk
-    stage_homebrew_runtime
     stage_gstreamer
     set_stage_install_names
 }
@@ -174,14 +177,6 @@ build_moltenvk() {
     copy_x86_64 "$moltenvk_dylib" "$STAGE_DIR/lib/libMoltenVK.dylib"
     cp "$moltenvk_source/LICENSE" "$STAGE_DIR/MoltenVK-LICENSE"
     mark_step_done moltenvk
-}
-
-stage_homebrew_runtime() {
-    step_done homebrew-runtime && return 0
-    log "Stage SDL2 from Homebrew"
-    cp -L "$BREW_PREFIX/opt/sdl2/lib/libSDL2-2.0.0.dylib" "$STAGE_DIR/lib/libSDL2-2.0.0.dylib"
-    ln -sf libSDL2-2.0.0.dylib "$STAGE_DIR/lib/libSDL2.dylib"
-    mark_step_done homebrew-runtime
 }
 
 # The GStreamer packages are expanded, not installed, so no root access is needed.
@@ -244,8 +239,7 @@ configure_wine() {
         "$SOURCE_ROOT/configure" --prefix="$OUTPUT_DIR" $WINE_CONFIGURE_OPTIONS \
             CPPFLAGS="-I$STAGE_DIR/include" \
             LDFLAGS="-L$STAGE_DIR/lib -Wl,-headerpad_max_install_names" \
-            PKG_CONFIG_LIBDIR="$STAGE_DIR/lib/pkgconfig:$gstreamer_library_prefix/lib/pkgconfig:$BREW_PREFIX/opt/sdl2/lib/pkgconfig" \
-            SDL2_LIBS="-L$STAGE_DIR/lib -lSDL2"
+            PKG_CONFIG_LIBDIR="$STAGE_DIR/lib/pkgconfig:$gstreamer_library_prefix/lib/pkgconfig"
     )
     check_wine_sonames
     mark_step_done wine-configure
@@ -392,7 +386,7 @@ copy_licenses() {
     cp "$GNUTLS_SOURCE_DIR/LICENSE" "$GNUTLS_SOURCE_DIR/doc/COPYING.LESSER" "$license_dir/gnutls/"
     cp "$NETTLE_SOURCE_DIR/COPYING.LESSERv3" "$license_dir/gnutls/nettle-COPYING.LESSERv3"
     cp "$SOURCES_DIR/sources/gnutls/gmp/COPYING.LESSERv3" "$license_dir/gnutls/gmp-COPYING.LESSERv3"
-    cp "$BREW_PREFIX"/opt/sdl2/LICENSE* "$license_dir/sdl2/" 2>/dev/null || true
+    cp "$SDL2_SOURCE_DIR/LICENSE.txt" "$license_dir/sdl2/"
     echo "GStreamer $(dep gstreamer.version) from $(dep gstreamer.runtime_url) (LGPL-2.1)" > "$license_dir/gstreamer/SOURCE.txt"
 }
 
@@ -405,7 +399,7 @@ write_build_info() {
         echo "macos-sdk: $(xcrun --show-sdk-version)"
         echo "xcode: $(xcodebuild -version | head -n 1)"
         # shellcheck disable=SC2086
-        "$BREW_PREFIX/bin/brew" list --versions $BUILD_FORMULAS $RUNTIME_FORMULAS | sed 's/^/homebrew: /'
+        "$BREW_PREFIX/bin/brew" list --versions $BUILD_FORMULAS | sed 's/^/homebrew: /'
     } > "$OUTPUT_DIR/share/wine/siliconcellar-build-info.txt"
 }
 
