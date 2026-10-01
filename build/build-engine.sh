@@ -260,10 +260,11 @@ configure_wine() {
     mark_step_done wine-configure
 }
 
-# Every library that Wine opens by name must come from the stage (@rpath) or the system.
+# Every library that Wine opens by path must come from the stage (@rpath) or the system.
+# Bare names (the libodbc fallback when ODBC is not found) use the normal dyld search.
 check_wine_sonames() {
     wrong_sonames=$(grep '^#define SONAME_' "$WINE_BUILD_DIR/include/config.h" |
-        grep -v -e '"@rpath/' -e '"/usr/lib/' -e '"/System/' || true)
+        grep -v -e '"@rpath/' -e '"/usr/lib/' -e '"/System/' -e '"[^/"]*"' || true)
     [ -z "$wrong_sonames" ] || die "Wine would open these libraries from a build path:
 $wrong_sonames"
 }
