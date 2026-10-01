@@ -27,13 +27,14 @@ Set `SC_SKIP_SMOKE_TESTS=1` to skip the smoke tests.
 3. Build GMP, FreeType, and MoltenVK from the CrossOver archive (MoltenVK keeps the CrossOver SPIRV-Cross). Build Nettle, GnuTLS (with the CrossOver source change in `patches/`), and SDL2 from the upstream releases. The CrossOver copies of Nettle and GnuTLS do not build on their own, and Homebrew `sdl2` is now `sdl2-compat`, which loads SDL3 at run time. Expand the GStreamer packages, except the ones in `gstreamer.skip_packages` (GTK, Python, developer tools, analytics, and editing), which Wine does not use for media. Give all these libraries `@rpath` install names.
 4. Configure Wine. The script stops if Wine would open a library from a build path.
 5. Build Wine and run `make install-lib`.
-6. Copy every non-system library into `lib/`, change the references to `@rpath`, and add the rpaths.
-7. Smoke tests: `wine --version`, `wineboot --init`, the probes in `probe/`, and no `/usr/local` or `.work` paths in any library.
+6. Copy every non-system library into `lib/`, change the references to `@rpath`, and add the rpaths. Wine opens some libraries at run time (GnuTLS, FreeType, SDL2, MoltenVK). On macOS their `SONAME_*` values in `config.h` are file names only, and dyld finds them through the rpath of the Wine `.so` files. So each staged library with a SONAME is copied too.
+7. Smoke tests: `wine --version`, `wineboot --init`, the probes in `probe/`, each SONAME library loads from `lib/`, and no `/usr/local` or `.work` paths in any library.
 
 ## Probes
 
 - `probe/boolean-args.c`: calls `NtQueryDirectoryObject` with dirty upper bits in the `BOOLEAN` arguments. The enumeration must end.
 - `probe/child-args.c`: checks that `SILICONCELLAR_CHILD_ARGS` adds arguments to a child process one time only.
+- `probe/load-libraries.c`: a macOS program (not Windows) with an rpath to `lib/`. It opens each SONAME library by file name, in the same way as Wine.
 
 ## Fixes on this branch
 
