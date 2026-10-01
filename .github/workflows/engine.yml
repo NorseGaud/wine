@@ -35,7 +35,7 @@ jobs:
 
       - name: Install Homebrew formulas
         run: |
-          brew install $(plutil -extract homebrew.build_formulas raw -o - build/deps.json) \
+          brew install --overwrite $(plutil -extract homebrew.build_formulas raw -o - build/deps.json) \
                        $(plutil -extract homebrew.runtime_formulas raw -o - build/deps.json)
 
       - name: Build the Engine
