@@ -30,7 +30,11 @@
     "runtime_sha256": "529fdf4a4027d942e59b5b3564f6400adaa008f63ce5f3fed4ffe35d73911994",
     "devel_url": "https://gstreamer.freedesktop.org/data/pkg/osx/1.28.7/gstreamer-1.0-devel-1.28.7-universal.pkg",
     "devel_sha256": "72a44870cf02472cbf6e9a84bcc25ee6807dd1c26659a112066373544d365e7a",
-    "skip_packages": "analytics devtools editing gtk python"
+    "skip_packages": "analytics devtools editing gtk python codecs-gpl codecs-gpl-restricted dvd-gpl",
+    "source_url": "https://gstreamer.freedesktop.org/data/pkg/src/1.28.7/cerbero-1.28.7.tar.xz",
+    "source_sha256": "6c502458f3e0cc1dea824879875b8939c890242091449405513ab7b8904494e5",
+    "license_skipped_sources": "autoconf automake bindgen-cli cargo-c dragonfire gettext-m4 glib-tools libtool m4 meson pkg-config pkg-config-dist tinyalsa gst-devtools-1.0 gst-editing-services-1.0 a52dec libdca x264 x265 x265-10bit x265-12bit",
+    "gpl_files": "liba52 libdca libdvdnav libdvdread libx264 libx265 libgsta52dec libgstdtsdec libgstdvdread libgstresindvd libgstx264 libgstx265"
   },
   "homebrew": {
     "prefix": "/usr/local",

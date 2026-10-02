@@ -52,4 +52,6 @@ Push a tag `sc-<crossover version>-<n>` (for example `sc-26.3.0-1`). The `Engine
 
 ## Licence
 
-Wine is LGPL-2.1-or-later (`COPYING.LIB`). The Engine archive has the licences of all bundled libraries in `share/doc`.
+Wine is LGPL-2.1-or-later (`COPYING.LIB`). The Engine has only LGPL and permissive libraries. The build skips the GPL GStreamer packages (`gstreamer.skip_packages` in `deps.json`) and stops if a file in `gstreamer.gpl_files` is in the Engine.
+
+The Engine archive has the licences of all bundled libraries in `share/doc`. `build/collect-gstreamer-licenses.py` copies the licence files of each GStreamer library from the GStreamer source bundle (`gstreamer.source_url`), which is also the source of the GStreamer package. `share/doc/gstreamer/SOURCE.txt` gives its URL and SHA-256. When you change the GStreamer version, update `gstreamer.license_skipped_sources` (build tools and GPL sources) for the new bundle.

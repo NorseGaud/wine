@@ -44,6 +44,7 @@ GNUTLS_SOURCE_DIR="$SOURCES_DIR/gnutls-$(dep gnutls.version)"
 # Homebrew sdl2 is now sdl2-compat, which loads SDL3 at run time. Build the real SDL2.
 SDL2_SOURCE_DIR="$SOURCES_DIR/SDL2-$(dep sdl2.version)"
 GSTREAMER_ROOT="$STAGE_DIR/gstreamer"
+GSTREAMER_SOURCE_BUNDLE="cerbero-$(dep gstreamer.version).tar.xz"
 
 export PATH="$BREW_PREFIX/opt/bison/bin:$BREW_PREFIX/opt/flex/bin:$BREW_PREFIX/opt/gettext/bin:$BREW_PREFIX/bin:/usr/bin:/bin:/usr/sbin:/sbin:$LLVM_MINGW_DIR/bin"
 
@@ -86,6 +87,7 @@ fetch_inputs() {
     fetch_pinned "$(dep llvm_mingw.url)" "$(dep llvm_mingw.sha256)" "llvm-mingw-$(dep llvm_mingw.version).tar.xz"
     fetch_pinned "$(dep gstreamer.runtime_url)" "$(dep gstreamer.runtime_sha256)" "gstreamer-$(dep gstreamer.version).pkg"
     fetch_pinned "$(dep gstreamer.devel_url)" "$(dep gstreamer.devel_sha256)" "gstreamer-devel-$(dep gstreamer.version).pkg"
+    fetch_pinned "$(dep gstreamer.source_url)" "$(dep gstreamer.source_sha256)" "$GSTREAMER_SOURCE_BUNDLE"
 
     if ! step_done extract; then
         log "Extract inputs"
@@ -181,7 +183,8 @@ build_moltenvk() {
 
 # The GStreamer packages are expanded, not installed, so no root access is needed.
 # is_skipped_gstreamer_package <component package name>: true for the packages in
-# gstreamer.skip_packages (runtime and devel), which Wine does not use for media.
+# gstreamer.skip_packages (runtime and devel). Wine does not use them for media, or they
+# are GPL: libav and applemedia (LGPL) decode AC-3 and DTS, and vtenc/openh264 encode H.264.
 is_skipped_gstreamer_package() {
     for skipped_package in $(dep gstreamer.skip_packages); do
         case "$1" in gstreamer-1.0-"$skipped_package"-[0-9]*|gstreamer-1.0-"$skipped_package"-devel-*) return 0 ;; esac
@@ -423,7 +426,27 @@ copy_licenses() {
     cp "$NETTLE_SOURCE_DIR/COPYING.LESSERv3" "$license_dir/gnutls/nettle-COPYING.LESSERv3"
     cp "$SOURCES_DIR/sources/gnutls/gmp/COPYING.LESSERv3" "$license_dir/gnutls/gmp-COPYING.LESSERv3"
     cp "$SDL2_SOURCE_DIR/LICENSE.txt" "$license_dir/sdl2/"
-    echo "GStreamer $(dep gstreamer.version) from $(dep gstreamer.runtime_url) (LGPL-2.1)" > "$license_dir/gstreamer/SOURCE.txt"
+    # shellcheck disable=SC2046
+    python3 "$SOURCE_ROOT/build/collect-gstreamer-licenses.py" "$CACHE_DIR/$GSTREAMER_SOURCE_BUNDLE" \
+        "$license_dir/gstreamer" $(dep gstreamer.license_skipped_sources)
+    cat > "$license_dir/gstreamer/SOURCE.txt" <<EOF
+GStreamer $(dep gstreamer.version) (LGPL-2.1-or-later) and the libraries in its macOS package.
+Package: $(dep gstreamer.runtime_url)
+Source of the package and of each library: $(dep gstreamer.source_url)
+Source SHA-256: $(dep gstreamer.source_sha256)
+The licence files of each library are in the folders next to this file.
+These GStreamer packages are not in the Engine (unused, or GPL): $(dep gstreamer.skip_packages)
+EOF
+}
+
+# The Engine has only LGPL and permissive libraries. Stop if a GPL library or plugin is in it.
+check_no_gpl_files() {
+    log "Check for GPL libraries"
+    found_gpl_files=$(for gpl_file in $(dep gstreamer.gpl_files); do
+        find "$OUTPUT_DIR/lib" \( -name "$gpl_file.dylib" -o -name "$gpl_file.*.dylib" \)
+    done)
+    [ -z "$found_gpl_files" ] || die "GPL files are in the Engine:
+$found_gpl_files"
 }
 
 write_build_info() {
@@ -524,6 +547,7 @@ configure_wine
 build_wine
 install_wine
 bundle_libraries
+check_no_gpl_files
 copy_licenses
 write_build_info
 if [ "${SC_SKIP_SMOKE_TESTS:-0}" = "1" ]; then
